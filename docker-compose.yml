@@ -1,0 +1,19 @@
+services:
+  rig-control:
+    build: ./server
+    network_mode: host
+    environment:
+      RIG_PUBLIC_URL: ${RIG_PUBLIC_URL:-http://localhost:8000}
+      RIG_TTS_BASE_URL: ${RIG_TTS_BASE_URL:-https://api.openai.com/v1}
+      RIG_TTS_API_KEY: ${RIG_TTS_API_KEY:-}
+      RIG_TTS_MODEL: ${RIG_TTS_MODEL:-gpt-4o-mini-tts}
+      RIG_TTS_VOICE: ${RIG_TTS_VOICE:-alloy}
+      RIG_TTS_PROXY: ${RIG_TTS_PROXY:-http://127.0.0.1:7890}
+      BOOTSTRAP_DEVICE_ID: ${BOOTSTRAP_DEVICE_ID:-}
+      BOOTSTRAP_DEVICE_TOKEN: ${BOOTSTRAP_DEVICE_TOKEN:-}
+    volumes:
+      - rig-control-data:/data
+    restart: unless-stopped
+
+volumes:
+  rig-control-data:

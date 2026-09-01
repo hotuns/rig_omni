@@ -6,6 +6,9 @@
 #include "button.h"
 #include "config.h"
 #include "mcp_server.h"
+#ifdef CONFIG_CUSTOM_CONTROL_ENABLED
+#include "custom_control_client.h"
+#endif
 #include "esp32_camera.h"
 // #include "camera_web_server.h"  // TODO: Migrate camera web server if needed
 // #include "lulu_ble.h"  // 暂时屏蔽，启用 BluFi 配网
@@ -304,9 +307,9 @@ private:
         vyaw = int(2.8 * dog_vyaw);
         if (time > 0) {
             vTaskDelay(pdMS_TO_TICKS(time));
+            vx = 0.0;
+            vyaw = 0.0;
         }
-        vx = 0.0;
-        vyaw = 0.0;
         ESP_LOGI(TAG, "SetDogSpeed: done");
     }
 
@@ -360,6 +363,26 @@ private:
 
     void InitializeTools() {
         auto& mcp_server = McpServer::GetInstance();
+
+        mcp_server.AddTool("self.screen.set_emotion",
+            "设置 Puppy 屏幕表情，emotion 为固件内置表情名称",
+            PropertyList({
+                Property("emotion", kPropertyTypeString),
+            }), [this](const PropertyList& properties) -> ReturnValue {
+                if (!display_) {
+                    return false;
+                }
+                display_->SetEmotion(properties["emotion"].value<std::string>().c_str());
+                return true;
+            });
+
+        mcp_server.AddTool("self.button.click",
+            "模拟 Puppy 物理按钮单击，切换开始或结束语音对话",
+            PropertyList(std::vector<Property>{}),
+            [](const PropertyList&) -> ReturnValue {
+                Application::GetInstance().ToggleChatState();
+                return true;
+            });
 
         mcp_server.AddTool("self.dog.move",
             "机器狗移动(vx,vyaw,time),前后移动速度vx(前正后负,0停下)和转向速度vyaw(左转正值,右转负值,0停下),time为移动时间(毫秒),time=0时持续移动,否则移动time毫秒后停止,默认70%幅度",
@@ -750,6 +773,9 @@ public:
 
     virtual void OnInitializationComplete() override {
         gpio_set_level(LASER_GPIO, 0);  // 初始化完成，关闭激光
+#ifdef CONFIG_CUSTOM_CONTROL_ENABLED
+        CustomControlClient::GetInstance().Start();
+#endif
         ESP_LOGI(TAG, "Initialization complete, laser off");
     }
 

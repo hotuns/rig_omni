@@ -63,6 +63,12 @@ void McpServer::AddCommonTools() {
             codec->SetOutputVolume(properties["volume"].value<int>());
             return true;
         });
+
+    AddTool("self.audio.stop", "Stop current speech and queued audio.", PropertyList(),
+        [](const PropertyList&) -> ReturnValue {
+            Application::GetInstance().InterruptForCustomControl();
+            return true;
+        });
     
     auto backlight = board.GetBacklight();
     if (backlight) {
@@ -137,6 +143,17 @@ void McpServer::AddCommonTools() {
                 // 预览模式无需上传，立即归还帧缓冲防止相机缓冲区耗尽
                 camera->ReleaseFrame();
                 return true;
+            });
+
+        AddTool("self.camera.upload_snapshot",
+            "Capture a photo and upload it to the custom control server.",
+            PropertyList({Property("url", kPropertyTypeString)}),
+            [camera](const PropertyList& properties) -> ReturnValue {
+                TaskPriorityReset priority_reset(1);
+                if (!camera->Capture()) {
+                    throw std::runtime_error("Failed to capture photo");
+                }
+                return camera->UploadSnapshot(properties["url"].value<std::string>());
             });
     }
 
@@ -611,6 +628,13 @@ void McpServer::GetToolsList(int id, const std::string& cursor, bool list_user_o
 }
 
 void McpServer::DoToolCall(int id, const std::string& tool_name, const cJSON* tool_arguments) {
+    ExecuteTool(tool_name, tool_arguments,
+        [this, id](const std::string& result) { ReplyResult(id, result); },
+        [this, id](const std::string& message) { ReplyError(id, message); });
+}
+
+void McpServer::ExecuteTool(const std::string& tool_name, const cJSON* tool_arguments,
+                            ToolResultCallback on_result, ToolErrorCallback on_error) {
     auto tool_iter = std::find_if(tools_.begin(), tools_.end(), 
                                  [&tool_name](const McpTool* tool) { 
                                      return tool->name() == tool_name; 
@@ -618,7 +642,7 @@ void McpServer::DoToolCall(int id, const std::string& tool_name, const cJSON* to
     
     if (tool_iter == tools_.end()) {
         ESP_LOGE(TAG, "tools/call: Unknown tool: %s", tool_name.c_str());
-        ReplyError(id, "Unknown tool: " + tool_name);
+        on_error("Unknown tool: " + tool_name);
         return;
     }
 
@@ -642,24 +666,25 @@ void McpServer::DoToolCall(int id, const std::string& tool_name, const cJSON* to
 
             if (!argument.has_default_value() && !found) {
                 ESP_LOGE(TAG, "tools/call: Missing valid argument: %s", argument.name().c_str());
-                ReplyError(id, "Missing valid argument: " + argument.name());
+                on_error("Missing valid argument: " + argument.name());
                 return;
             }
         }
     } catch (const std::exception& e) {
         ESP_LOGE(TAG, "tools/call: %s", e.what());
-        ReplyError(id, e.what());
+        on_error(e.what());
         return;
     }
 
     // Use main thread to call the tool
     auto& app = Application::GetInstance();
-    app.Schedule([this, id, tool_iter, arguments = std::move(arguments)]() {
+    app.Schedule([tool_iter, arguments = std::move(arguments),
+                  on_result = std::move(on_result), on_error = std::move(on_error)]() {
         try {
-            ReplyResult(id, (*tool_iter)->Call(arguments));
+            on_result((*tool_iter)->Call(arguments));
         } catch (const std::exception& e) {
             ESP_LOGE(TAG, "tools/call: %s", e.what());
-            ReplyError(id, e.what());
+            on_error(e.what());
         }
     });
 }

@@ -18,6 +18,7 @@ BIN_DIR = os.path.join(PROJECT_ROOT, "bin")
 OFFSETS = {
     "bootloader": 0,
     "partition-table": 32768,      # 0x8000
+    "ota-data": 102400,            # 0x19000
     "app": 131072,                 # 0x20000
     "assets": 8388608,             # 0x800000
 }
@@ -71,6 +72,7 @@ def copy_bin_files():
     files_to_copy = [
         ("build/bootloader/bootloader.bin", "bootloader.bin"),
         ("build/partition_table/partition-table.bin", "partition-table.bin"),
+        ("build/ota_data_initial.bin", "ota_data_initial.bin"),
         (f"build/{bin_name}.bin", f"{bin_name}.bin"),
         ("tools/spiffs_assets/build/assets.bin", "assets.bin"),
     ]
@@ -100,6 +102,7 @@ def generate_manifest(version):
                 "parts": [
                     {"path": "bootloader.bin", "offset": OFFSETS["bootloader"]},
                     {"path": "partition-table.bin", "offset": OFFSETS["partition-table"]},
+                    {"path": "ota_data_initial.bin", "offset": OFFSETS["ota-data"]},
                     {"path": f"{bin_name}.bin", "offset": OFFSETS["app"]},
                     {"path": "assets.bin", "offset": OFFSETS["assets"]},
                 ]

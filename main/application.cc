@@ -1145,6 +1145,18 @@ void Application::PlaySound(const std::string_view& sound) {
     audio_service_.PlaySound(sound);
 }
 
+void Application::InterruptForCustomControl() {
+    Schedule([this]() {
+        if (protocol_ && protocol_->IsAudioChannelOpened()) {
+            protocol_->SendAbortSpeaking(kAbortReasonNone);
+            protocol_->CloseAudioChannel();
+        }
+        audio_service_.EnableVoiceProcessing(false);
+        audio_service_.ResetDecoder();
+        SetDeviceState(kDeviceStateIdle);
+    });
+}
+
 void Application::ResetProtocol() {
     Schedule([this]() {
         // Close audio channel if opened
@@ -1163,4 +1175,3 @@ void Application::ResetProtocolSync() {
     }
     protocol_.reset();
 }
-

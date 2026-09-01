@@ -109,6 +109,13 @@ endmacro()
 
 if(CONFIG_BOARD_TYPE_PUPPY)
     rig_board("puppy" "RIG-Puppy" "rig-puppy")
+    # Puppy uses Espressif's trained "小路小路" WakeNet model.  The spoken
+    # phrase is part of the model itself; changing only the displayed command
+    # text cannot change what the detector hears.
+    set(WAKENET_MODEL "wn9_xiaoluxiaolu_tts2")
+    set(WAKENET_SRC "${PROJECT_DIR}/managed_components/espressif__esp-sr/model/wakenet_model/${WAKENET_MODEL}")
+    list(APPEND SOURCES "custom_control/custom_control_client.cc")
+    list(APPEND INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/custom_control)
 elseif(CONFIG_BOARD_TYPE_HOVER)
     rig_board("hover" "RIG-Hover" "rig-hover")
 elseif(CONFIG_BOARD_TYPE_ARM)

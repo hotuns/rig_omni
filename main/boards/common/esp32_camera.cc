@@ -335,6 +335,23 @@ std::string Esp32Camera::Explain(const std::string &question) {
     return result;
 }
 
+std::string Esp32Camera::UploadSnapshot(const std::string &url) {
+    const auto previous_url = explain_url_;
+    const auto previous_token = explain_token_;
+    explain_url_ = url;
+    explain_token_.clear();
+    try {
+        auto result = Explain("snapshot");
+        explain_url_ = previous_url;
+        explain_token_ = previous_token;
+        return result;
+    } catch (...) {
+        explain_url_ = previous_url;
+        explain_token_ = previous_token;
+        throw;
+    }
+}
+
 void Esp32Camera::ReleaseFrame() {
     if (current_fb_) {
         esp_camera_fb_return(current_fb_);

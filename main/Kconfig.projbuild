@@ -86,6 +86,27 @@ config PUPPY_ENABLE_BLE_CONTROL
         WARNING: Enabling BLE may cause memory issues and disable voice/MCP services.
         BLE is disabled by default. Can be enabled via MCP tool at runtime.
 
+config CUSTOM_CONTROL_ENABLED
+    bool "Enable custom control server for Puppy"
+    default y
+    depends on BOARD_TYPE_PUPPY
+    help
+        Keep the vendor cloud connection and add an independent WebSocket control channel.
+
+config CUSTOM_CONTROL_SERVER_URL
+    string "Custom control WebSocket URL"
+    default ""
+    depends on CUSTOM_CONTROL_ENABLED
+    help
+        Example: wss://robot.example.com/ws/device. NVS configuration overrides this value.
+
+config CUSTOM_CONTROL_TOKEN
+    string "Custom control bootstrap token"
+    default ""
+    depends on CUSTOM_CONTROL_ENABLED
+    help
+        Per-device bootstrap token. Prefer provisioning the production token into NVS.
+
 choice DISPLAY_STYLE
     prompt "Select display style"
     default USE_DEFAULT_MESSAGE_STYLE

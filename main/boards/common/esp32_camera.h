@@ -42,4 +42,5 @@ public:
     virtual bool SetVFlip(bool enabled) override;
     virtual bool SetSwapBytes(bool enabled) override;
     virtual std::string Explain(const std::string &question) override;
+    virtual std::string UploadSnapshot(const std::string &url) override;
 };

@@ -112,6 +112,7 @@ public:
     AecMode GetAecMode() const { return aec_mode_; }
     void PlaySound(const std::string_view& sound);
     AudioService& GetAudioService() { return audio_service_; }
+    void InterruptForCustomControl();
     
     /**
      * Get the user-configured idle power save level from NVS.

@@ -203,6 +203,18 @@ main/boards/<board>/emoji/
 
 ## 🛠️ 开发指南
 
+### 自定义控制服务器
+
+Puppy 固件可在保留原厂语音和 MCP 云服务的同时连接独立控制服务器。配套的 FastAPI 服务、设备管理控制台、工作流、离线提醒和远程语音功能位于 [`server/`](server/README.md)。
+
+```bash
+cp server/.env.example .env
+docker compose up --build -d
+# 打开 http://localhost:8000
+```
+
+首次安装自定义固件需要完整烧录更新后的分区表；后续工作流、提醒和媒体内容可从控制台远程同步。
+
 ### 新增板型
 
 ```bash

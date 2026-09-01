@@ -2,6 +2,7 @@
 #define CAMERA_H
 
 #include <string>
+#include <stdexcept>
 
 class Camera {
 public:
@@ -12,6 +13,9 @@ public:
     virtual bool SetVFlip(bool enabled) = 0;
     virtual bool SetSwapBytes(bool enabled) { return false; }  // Optional, default no-op
     virtual std::string Explain(const std::string& question) = 0;
+    virtual std::string UploadSnapshot(const std::string& url) {
+        throw std::runtime_error("Camera snapshot upload is not supported");
+    }
 };
 
 #endif // CAMERA_H

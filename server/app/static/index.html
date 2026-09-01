@@ -1,0 +1,567 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RIG Control</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+    <link rel="stylesheet" href="/static/cockpit.css" />
+    <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">R</span><span>RIG Control</span>
+        </div>
+        <nav id="nav">
+          <a class="nav-item" data-view="devices" href="/devices">
+            <i data-lucide="radio-tower"></i><span>设备</span>
+          </a>
+          <a class="nav-item active" data-view="control" href="/control">
+            <i data-lucide="gamepad-2"></i><span>即时控制</span>
+          </a>
+          <a class="nav-item" data-view="workflows" href="/workflows">
+            <i data-lucide="workflow"></i><span>工作流</span>
+          </a>
+          <a class="nav-item" data-view="reminders" href="/reminders">
+            <i data-lucide="clock-3"></i><span>提醒</span>
+          </a>
+          <a class="nav-item" data-view="media" href="/media-library">
+            <i data-lucide="audio-lines"></i><span>媒体</span>
+          </a>
+          <a class="nav-item" data-view="network" href="/network">
+            <i data-lucide="wifi"></i><span>网络</span>
+          </a>
+        </nav>
+        <div class="sidebar-foot">
+          <span id="api-status" class="status-dot"></span>控制服务已连接
+        </div>
+      </aside>
+
+      <main>
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">PUPPY CLOUD CONSOLE</p>
+            <h1 id="page-title">即时控制</h1>
+          </div>
+          <div class="top-actions">
+            <select id="device-select" aria-label="当前设备"></select>
+            <button class="icon-button" id="refresh" title="刷新">
+              <i data-lucide="refresh-cw"></i>
+            </button>
+          </div>
+        </header>
+
+        <section class="view" id="view-devices">
+          <div class="section-heading">
+            <div>
+              <h2>设备状态</h2>
+              <p>查看 Puppy 与云端控制服务的连接状态。</p>
+            </div>
+            <button class="command" id="open-add-device">
+              <i data-lucide="plus"></i>添加设备
+            </button>
+          </div>
+          <div id="device-list" class="device-grid"></div>
+          <div class="detail-band" id="device-detail"></div>
+        </section>
+
+        <section class="view active" id="view-control">
+          <div class="section-heading">
+            <div>
+              <h2>远程驾驶舱</h2>
+              <p>按住摇杆或使用 WASD 驾驶；松开、切换页面或网络中断时停止。</p>
+            </div>
+            <div class="live-state">
+              <span class="status-dot"></span
+              ><span id="live-label">正在连接实时通道</span>
+            </div>
+          </div>
+          <div class="cockpit-grid">
+            <section class="camera-panel panel">
+              <div class="panel-head">
+                <div>
+                  <span class="panel-kicker">VISION</span>
+                  <h3>摄像头画面</h3>
+                </div>
+                <div class="button-row">
+                  <button class="secondary compact" id="take-snapshot">
+                    <i data-lucide="camera"></i>拍照</button
+                  ><button class="secondary compact" id="toggle-monitor">
+                    <i data-lucide="scan-eye"></i><span>开启监控</span>
+                  </button>
+                </div>
+              </div>
+              <div id="camera-view" class="camera-view camera-live">
+                <p>尚未获取画面</p>
+              </div>
+              <div class="camera-meta">
+                <span id="camera-state">监控已关闭</span
+                ><span id="camera-time">--</span>
+              </div>
+            </section>
+            <section class="drive-panel panel">
+              <div class="panel-head">
+                <div>
+                  <span class="panel-kicker">DRIVE</span>
+                  <h3>移动控制</h3>
+                </div>
+                <span class="key-hint" id="gamepad-state">W A S D · 手柄未连接</span>
+              </div>
+              <div
+                id="joystick"
+                class="joystick"
+                role="application"
+                aria-label="移动摇杆"
+              >
+                <div class="joystick-cross"></div>
+                <div id="joystick-knob" class="joystick-knob"></div>
+              </div>
+              <label class="speed-control"
+                >速度
+                <input
+                  id="drive-speed"
+                  type="range"
+                  min="20"
+                  max="100"
+                  value="65"
+                /><output id="drive-speed-value">65</output></label
+              ><button id="emergency-stop" class="emergency">
+                <i data-lucide="octagon"></i><span>紧急停止</span>
+              </button>
+            </section>
+            <section class="voice-panel panel">
+              <div class="panel-head">
+                <div>
+                  <span class="panel-kicker">VOICE</span>
+                  <h3>让 Puppy 说</h3>
+                </div>
+                <button id="stop-audio" class="secondary compact">
+                  <i data-lucide="volume-x"></i>停止
+                </button>
+              </div>
+              <form id="speak-form">
+                <textarea
+                  id="speak-text"
+                  rows="5"
+                  required
+                  placeholder="输入一段文字，Puppy 会直接说出来。"
+                ></textarea
+                ><label class="voice-choice"
+                  ><span>音色</span
+                  ><select id="speak-voice">
+                    <option value="zh-CN-XiaoxiaoNeural" selected>
+                      晓晓 · 温暖自然（默认）
+                    </option>
+                    <option value="zh-CN-XiaoyiNeural">晓伊 · 活泼灵动</option>
+                    <option value="zh-CN-YunjianNeural">云健 · 热情有力</option>
+                    <option value="zh-CN-YunxiNeural">云希 · 阳光活泼</option>
+                    <option value="zh-CN-YunxiaNeural">云夏 · 可爱卡通</option>
+                    <option value="zh-CN-YunyangNeural">云扬 · 专业可靠</option>
+                    <option value="zh-CN-liaoning-XiaobeiNeural">
+                      晓北 · 辽宁方言
+                    </option>
+                    <option value="zh-CN-shaanxi-XiaoniNeural">
+                      晓妮 · 陕西方言
+                    </option>
+                  </select></label
+                ><button class="command wide" type="submit">
+                  <i data-lucide="send"></i>立即播放
+                </button>
+              </form>
+              <div class="quick-say">
+                <button data-say="你好，我是 Puppy。">打招呼</button
+                ><button data-say="你已经坐了很久，请起来活动一下。">
+                  久坐提醒</button
+                ><button data-say="我在这里，有什么可以帮你？">回应</button>
+              </div>
+              <div class="device-controls">
+                <label
+                  >音量
+                  <input
+                    id="volume"
+                    type="range"
+                    min="0"
+                    max="100"
+                    value="50"
+                  /><output id="volume-value">50</output></label
+                ><button class="secondary compact" id="set-volume">应用</button>
+              </div>
+            </section>
+          </div>
+          <section class="panel action-panel">
+            <div class="panel-head">
+              <div>
+                <span class="panel-kicker">MOTION</span>
+                <h3>动作库</h3>
+              </div>
+              <div class="button-row">
+                <button class="secondary compact" data-laser="1">
+                  <i data-lucide="zap"></i>光剑</button
+                ><button class="secondary compact" data-laser="0">
+                  <i data-lucide="zap-off"></i>关闭
+                </button>
+              </div>
+            </div>
+            <div class="action-grid" id="preset-actions"></div>
+          </section>
+          <section class="capability-grid">
+            <form id="motor-form" class="panel capability-panel">
+              <div class="panel-head">
+                <div>
+                  <span class="panel-kicker">SERVOS</span>
+                  <h3>五舵机角度</h3>
+                </div>
+              </div>
+              <div class="virtual-puppy">
+                <div class="simulation-stage">
+                  <div class="simulation-label"><span class="status-dot"></span>实时姿态仿真</div>
+                  <div id="puppy-preview" role="img" aria-label="Puppy 五关节三维姿态预览"></div>
+                  <div class="simulation-axis"><span>FRONT</span><i></i><span>REAR</span></div>
+                </div>
+                <div class="puppy-angle-readout" id="puppy-angle-readout"></div>
+              </div>
+              <div class="motor-grid">
+                <label>左前 <output id="motor-value-1">40°</output><input id="motor-angle-1" type="range" min="-135" max="135" value="40" /></label>
+                <label>右前 <output id="motor-value-2">40°</output><input id="motor-angle-2" type="range" min="-135" max="135" value="40" /></label>
+                <label>左后 <output id="motor-value-3">40°</output><input id="motor-angle-3" type="range" min="-135" max="135" value="40" /></label>
+                <label>右后 <output id="motor-value-4">40°</output><input id="motor-angle-4" type="range" min="-135" max="135" value="40" /></label>
+                <label>腰部 <output id="motor-value-5">0°</output><input id="motor-angle-5" type="range" min="-30" max="30" value="0" /></label>
+                <label>耗时 ms<input id="motor-time" type="number" min="0" max="10000" value="500" /></label>
+              </div>
+              <div class="button-row"><button class="command" type="submit">发送当前姿态</button><button class="secondary" id="record-pose" type="button">记录关键帧</button><button class="secondary" id="play-poses" type="button">回放</button><button class="secondary" id="clear-poses" type="button">清空</button></div>
+              <div id="pose-timeline" class="pose-timeline"><p class="muted-copy">拖动关节后记录关键帧</p></div>
+              <div class="pose-save"><input id="pose-workflow-name" placeholder="动作名称"/><button class="secondary" id="save-pose-workflow" type="button">保存为工作流</button></div>
+            </form>
+
+            <section class="panel capability-panel">
+              <div class="panel-head">
+                <div>
+                  <span class="panel-kicker">DISPLAY</span>
+                  <h3>屏幕与表情</h3>
+                </div>
+              </div>
+              <label>表情
+                <select id="screen-emotion">
+                  <option value="neutral">平静</option><option value="happy">开心</option>
+                  <option value="laughing">大笑</option><option value="loving">喜欢</option>
+                  <option value="angry">生气</option><option value="sad">难过</option>
+                  <option value="crying">哭泣</option><option value="confused">困惑</option>
+                  <option value="cool">酷</option><option value="shocked">震惊</option>
+                  <option value="surprised">惊喜</option><option value="sleepy">困倦</option>
+                  <option value="winking">眨眼</option><option value="silly">调皮</option>
+                  <option value="relaxed">放松</option><option value="thinking">思考</option>
+                  <option value="listen">倾听</option><option value="confident">自信</option>
+                  <option value="embarrassed">害羞</option><option value="kiss">亲亲</option>
+                  <option value="delicious">美味</option>
+                </select>
+              </label>
+              <button class="secondary wide" id="set-emotion" type="button">显示表情</button>
+              <label class="brightness-control">亮度
+                <input id="screen-brightness" type="range" min="0" max="100" value="70" />
+                <output id="screen-brightness-value">70</output>
+              </label>
+              <button class="secondary wide" id="set-brightness" type="button">应用亮度</button>
+            </section>
+
+            <section class="panel capability-panel">
+              <div class="panel-head">
+                <div>
+                  <span class="panel-kicker">HARDWARE</span>
+                  <h3>麦克风、按钮与 BLE</h3>
+                </div>
+              </div>
+              <p class="muted-copy">模拟单击可开始或结束官方语音会话；AEC 对应物理双击，标定对应三击。</p>
+              <div class="control-buttons">
+                <button class="secondary" type="button" data-tool="self.button.click" data-arguments="{}">模拟单击</button>
+                <button class="secondary" type="button" data-tool="self.set_aec" data-arguments='{"enable":1}'>AEC 开</button>
+                <button class="secondary" type="button" data-tool="self.set_aec" data-arguments='{"enable":0}'>AEC 关</button>
+                <button class="secondary" type="button" data-tool="self.dog.calibrate" data-arguments='{"mode":1}'>进入标定</button>
+                <button class="secondary" type="button" data-tool="self.dog.calibrate" data-arguments='{"mode":0}'>完成标定</button>
+                <button class="secondary" type="button" data-tool="self.ble.remote_control" data-arguments='{"enable":1}'>BLE 遥控开</button>
+                <button class="secondary" type="button" data-tool="self.ble.remote_control" data-arguments='{"enable":0}'>BLE 遥控关</button>
+              </div>
+            </section>
+
+            <form id="mcp-form" class="panel capability-panel">
+              <div class="panel-head">
+                <div>
+                  <span class="panel-kicker">MCP</span>
+                  <h3>工具调用</h3>
+                </div>
+              </div>
+              <label>工具名<input id="mcp-tool-name" required list="mcp-tools" value="self.get_device_status" /></label>
+              <datalist id="mcp-tools">
+                <option value="self.get_device_status"></option><option value="self.dog.move"></option>
+                <option value="self.dog.set_motor_angle"></option><option value="self.screen.set_emotion"></option>
+                <option value="self.screen.set_brightness"></option><option value="self.camera.preview"></option>
+                <option value="self.audio_speaker.set_volume"></option><option value="self.audio.stop"></option>
+                <option value="self.button.click"></option><option value="self.set_aec"></option>
+                <option value="self.ble.remote_control"></option><option value="self.laser.control"></option>
+                <option value="self.set_power_mode"></option><option value="self.set_language"></option>
+              </datalist>
+              <label>arguments JSON<textarea id="mcp-arguments" rows="5" spellcheck="false">{}</textarea></label>
+              <button class="command wide" type="submit">调用工具</button>
+            </form>
+          </section>
+          <section class="panel firmware-strip">
+            <div class="firmware-icon"><i data-lucide="audio-waveform"></i></div>
+            <div>
+              <h3>本地唤醒词</h3>
+              <p class="muted-copy">唤醒词由设备固件内的 WakeNet 模型提供，Web 控制台无法直接修改。</p>
+            </div>
+            <strong>小鹿小鹿</strong>
+            <span class="badge">固件资源</span>
+          </section>
+          <div id="command-log" class="command-console">
+            <span class="console-dot"></span><span>等待命令</span>
+          </div>
+        </section>
+
+        <section class="view" id="view-workflows">
+          <div class="section-heading">
+            <div>
+              <h2>工作流</h2>
+              <p>组合动作、远程语音和延时，保存后会同步到设备离线运行。</p>
+            </div>
+            <button class="command" id="new-workflow">
+              <i data-lucide="plus"></i>新建工作流
+            </button>
+          </div>
+          <div class="workflow-layout">
+            <aside class="workflow-library panel">
+              <div class="workflow-library-head"><span>已保存</span><span id="workflow-count" class="badge">0</span></div>
+              <div id="workflow-list" class="list-pane"></div>
+            </aside>
+            <form id="workflow-form" class="workflow-editor panel">
+              <input id="workflow-id" type="hidden" /><label
+                class="workflow-name">工作流名称<input
+                  id="workflow-name"
+                  required
+                  placeholder="久坐提醒" /></label>
+              <input id="workflow-steps" type="hidden" />
+              <div class="workflow-toolbar" aria-label="添加步骤">
+                <span>添加步骤</span>
+                <button type="button" class="secondary compact" data-add-step="action"><i data-lucide="dog"></i>动作</button>
+                <button type="button" class="secondary compact" data-add-step="delay"><i data-lucide="timer"></i>等待</button>
+                <button type="button" class="secondary compact" data-add-step="audio"><i data-lucide="volume-2"></i>播放语音</button>
+              </div>
+              <div id="workflow-builder" class="workflow-builder"></div>
+              <div class="form-actions">
+                <button type="button" class="secondary" id="run-workflow">
+                  <i data-lucide="play"></i>立即执行</button
+                ><button class="command" type="submit">
+                  <i data-lucide="save"></i>保存并同步
+                </button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <section class="view" id="view-reminders">
+          <div class="section-heading">
+            <div>
+              <h2>提醒计划</h2>
+              <p>设备保存最近同步的计划，断开自定义服务器后仍可触发。</p>
+            </div>
+            <button class="command" id="new-reminder">
+              <i data-lucide="plus"></i>新建提醒
+            </button>
+          </div>
+          <div class="split-pane">
+            <div id="reminder-list" class="list-pane"></div>
+            <form id="reminder-form" class="editor-pane">
+              <input id="reminder-id" type="hidden" /><label
+                >名称<input
+                  id="reminder-name"
+                  required
+                  placeholder="工作日久坐提醒" /></label
+              ><label
+                >工作流<select id="reminder-workflow" required></select
+              ></label>
+              <div class="two-col">
+                <label
+                  >开始时间<input
+                    id="reminder-start"
+                    type="time"
+                    value="09:00" /></label
+                ><label
+                  >结束时间<input id="reminder-end" type="time" value="18:00"
+                /></label>
+              </div>
+              <div class="two-col">
+                <label
+                  >间隔（分钟）<input
+                    id="reminder-interval"
+                    type="number"
+                    min="1"
+                    value="45" /></label
+                ><label
+                  >时区偏移（分钟）<input
+                    id="reminder-timezone"
+                    type="number"
+                    value="480"
+                /></label>
+              </div>
+              <fieldset>
+                <legend>生效星期</legend>
+                <div class="days" id="reminder-days"></div>
+              </fieldset>
+              <label class="toggle"
+                ><input id="reminder-enabled" type="checkbox" checked /><span
+                  >启用提醒</span
+                ></label
+              >
+              <div class="form-actions">
+                <button class="command" type="submit">
+                  <i data-lucide="save"></i>保存并同步
+                </button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <section class="view" id="view-media">
+          <div class="section-heading">
+            <div>
+              <h2>语音与媒体</h2>
+              <p>
+                上传音频或生成语音，服务端会统一转换为 Puppy 可播放的 OGG Opus。
+              </p>
+            </div>
+          </div>
+          <div class="media-tools">
+            <form id="upload-form">
+              <h3>上传音频</h3>
+              <input
+                id="media-file"
+                type="file"
+                accept="audio/*"
+                required
+              /><button class="command" type="submit">
+                <i data-lucide="upload"></i>上传并转换
+              </button>
+            </form>
+            <form id="tts-form">
+              <h3>文本转语音</h3>
+              <textarea
+                id="tts-text"
+                required
+                rows="4"
+                placeholder="你已经坐了很久，请起来活动一下。"
+              ></textarea>
+              <div class="button-row">
+                <input id="tts-name" value="久坐提醒" /><button
+                  class="command"
+                  type="submit"
+                >
+                  <i data-lucide="sparkles"></i>生成语音
+                </button>
+              </div>
+            </form>
+          </div>
+          <div id="media-list" class="media-list"></div>
+        </section>
+
+        <section class="view" id="view-network">
+          <div class="section-heading">
+            <div>
+              <h2>网络管理</h2>
+              <p>
+                扫描 Puppy
+                附近的网络并远程切换。新网络会设为首选，原网络继续保留用于连接失败时回退。
+              </p>
+            </div>
+            <button class="secondary" id="scan-wifi">
+              <i data-lucide="scan-line"></i>扫描附近网络
+            </button>
+          </div>
+          <div class="network-layout">
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <span class="panel-kicker">AVAILABLE</span>
+                  <h3>附近网络</h3>
+                </div>
+                <span id="wifi-scan-state" class="badge">尚未扫描</span>
+              </div>
+              <div id="wifi-list" class="wifi-list">
+                <p class="muted-copy">
+                  点击扫描，让 Puppy 返回它能看到的 Wi‑Fi。
+                </p>
+              </div>
+            </section>
+            <form id="wifi-form" class="panel wifi-form">
+              <div class="panel-head">
+                <div>
+                  <span class="panel-kicker">CONNECT</span>
+                  <h3>添加并切换</h3>
+                </div>
+              </div>
+              <label
+                >Wi‑Fi 名称<input
+                  id="wifi-ssid"
+                  required
+                  autocomplete="off"
+                  placeholder="SSID" /></label
+              ><label
+                >Wi‑Fi 密码<input
+                  id="wifi-password"
+                  type="password"
+                  autocomplete="new-password"
+                  placeholder="开放网络可留空"
+              /></label>
+              <div class="switch-note">
+                <i data-lucide="info"></i
+                ><span
+                  >提交后 Puppy
+                  会短暂离线并重启。连接成功后将自动回到控制台；失败则尝试原有网络。</span
+                >
+              </div>
+              <button class="command" type="submit">
+                <i data-lucide="router"></i>保存并切换
+              </button>
+              <div id="wifi-result" class="result-line">等待操作</div>
+            </form>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="device-dialog">
+      <form id="device-form" method="dialog">
+        <div class="dialog-head">
+          <h2>添加 Puppy</h2>
+          <button
+            class="icon-button"
+            id="close-device-dialog"
+            type="button"
+            title="关闭"
+          >
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+        <label
+          >设备 ID<input
+            id="new-device-id"
+            required
+            placeholder="7C:E8:B1:B3:1B:78" /></label
+        ><label>名称<input id="new-device-name" value="RIG Puppy" /></label
+        ><label>设备令牌（留空自动生成）<input id="new-device-token" /></label>
+        <div class="form-actions">
+          <button class="command" value="default" type="submit">
+            创建设备
+          </button>
+        </div>
+        <pre id="created-token"></pre>
+      </form>
+    </dialog>
+    <div id="toast" role="status"></div>
+    <script src="/static/app.js"></script>
+    <script type="importmap">
+      {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"}}
+    </script>
+    <script type="module" src="/static/puppy-sim.js"></script>
+  </body>
+</html>

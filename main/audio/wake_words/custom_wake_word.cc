@@ -1,4 +1,5 @@
 #include "custom_wake_word.h"
+#include "settings.h"
 #include "audio_service.h"
 #include "system_info.h"
 #include "assets.h"
@@ -96,6 +97,16 @@ bool CustomWakeWord::Initialize(AudioCodec* codec, srmodel_list_t* models_list) 
     } else {
         models_ = models_list;
         ParseWakenetModelConfig();
+    }
+
+    Settings wake_settings("custom_ctl", false);
+    auto configured_command = wake_settings.GetString("wake_word");
+    if (!configured_command.empty()) {
+        auto configured_display = wake_settings.GetString("wake_display", configured_command);
+        auto configured_threshold = wake_settings.GetInt("wake_threshold", 20);
+        commands_.clear();
+        commands_.push_back({configured_command, configured_display, "wake"});
+        threshold_ = configured_threshold / 100.0f;
     }
 
     if (models_ == nullptr || models_->num == -1) {
