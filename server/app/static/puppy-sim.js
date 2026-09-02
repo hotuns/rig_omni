@@ -109,7 +109,8 @@ scene.add(grid);
 function updatePose(pose) {
   const angles = [pose.angle1, pose.angle2, pose.angle3, pose.angle4];
   legPivots.forEach((pivot, index) => {
-    pivot.rotation.x = THREE.MathUtils.degToRad(-angles[index] * 0.5);
+    const direction = index < 2 ? -1 : 1;
+    pivot.rotation.x = THREE.MathUtils.degToRad(angles[index] * direction * 0.5);
   });
   waist.rotation.z = THREE.MathUtils.degToRad(pose.angle5);
 }
