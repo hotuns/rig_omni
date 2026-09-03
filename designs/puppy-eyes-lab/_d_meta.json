@@ -1,0 +1,18 @@
+{
+  "type": "design",
+  "designSystems": [],
+  "primaryDesignSystem": null,
+  "assets": {
+    "Puppy Eyes Expression Lab": {
+      "versions": [
+        {
+          "path": "Puppy Eyes Expression Lab.html",
+          "createdAt": "2026-09-02T03:47:41.596Z",
+          "status": "needs-review"
+        }
+      ]
+    }
+  },
+  "createdAt": "2026-09-02T03:47:41.598Z",
+  "updatedAt": "2026-09-02T05:09:13.536Z"
+}

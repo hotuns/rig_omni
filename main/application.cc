@@ -115,6 +115,7 @@ void Application::Initialize() {
         xEventGroupSetBits(event_group_, MAIN_EVENT_SEND_AUDIO);
     };
     callbacks.on_wake_word_detected = [this](const std::string& wake_word) {
+        Board::GetInstance().OnWakeWordDetected();
         xEventGroupSetBits(event_group_, MAIN_EVENT_WAKE_WORD_DETECTED);
     };
     callbacks.on_vad_change = [this](bool speaking) {
@@ -124,6 +125,7 @@ void Application::Initialize() {
 
     // Add state change listeners
     state_machine_.AddStateChangeListener([this](DeviceState old_state, DeviceState new_state) {
+        Board::GetInstance().OnDeviceStateChanged(old_state, new_state);
         xEventGroupSetBits(event_group_, MAIN_EVENT_STATE_CHANGED);
     });
 

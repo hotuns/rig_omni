@@ -342,27 +342,25 @@ void Pee(){
 }
 
 void Stretch(){
-    float duration[] = {3.0, 1.5, 1.0};
+    float duration[] = {0.7, 0.6, 0.7};
     uint16_t timepoint[4] = {0};
     for(int i=1;i<4;i++){
         timepoint[i] = timepoint[i-1] + duration[i-1]*TS;
     }
     uint16_t counter = Action_Counter[Stretch_ID];
-    float phase = counter*2.0*PI/TS;
 	if(counter==timepoint[0]){
 		Clear_State(0);
-        motor_speed = 3000;        
+        motor_speed = 1800;
     }else if(counter>timepoint[0] && counter<timepoint[1]){
-        set_motor_pos(-400 + 2.2*counter, 400 - 2.2*counter, -750 - 1.8*counter, 750 + 1.8*counter, 0);
+        const float progress = static_cast<float>(counter - timepoint[0]) /
+                               (timepoint[1] - timepoint[0]);
+        set_motor_pos(-600 + 450 * progress, 600 - 450 * progress, -600, 600, 0);
     }else if(counter>timepoint[1] && counter<timepoint[2]){
-        set_motor_pos(-900, 900, 100, -100, 0);
+        set_motor_pos(-150, 150, -600, 600, 0);
 	}else if(counter>timepoint[2] && counter<timepoint[3]){
-        motor_speed = 5000;
-        set_motor_pos(-900 + 100*cos(phase+3*PI/4.0),
-                       900 + 100*cos(phase+3*PI/4.0),
-                       100,
-                       -100,
-                       100*cos(phase+PI/4.0));
+        const float progress = static_cast<float>(counter - timepoint[2]) /
+                               (timepoint[3] - timepoint[2]);
+        set_motor_pos(-150 - 450 * progress, 150 + 450 * progress, -600, 600, 0);
     }else if(counter==timepoint[3]){
         Clear_State(1);
     }

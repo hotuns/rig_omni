@@ -27,6 +27,9 @@
 #include <driver/uart.h>
 #include <driver/gpio.h>
 #include <nvs_flash.h>
+#include <esp_random.h>
+#include <atomic>
+#include <cmath>
 
 #include "esp_lcd_gc9a01.h"
 #include "xgo.h"
@@ -46,6 +49,22 @@ private:
     Esp32Camera* camera_ = nullptr;  // 初始化为nullptr
     TaskHandle_t xgo_task_handle_ = nullptr;
     TaskHandle_t xgo_rx_task_handle_ = nullptr;
+    TaskHandle_t idle_motion_task_handle_ = nullptr;
+    volatile uint32_t manual_control_generation_ = 0;
+    std::atomic<int64_t> last_interaction_us_{0};
+    std::atomic<int64_t> wake_feedback_until_us_{0};
+    std::atomic<int64_t> tap_feedback_until_us_{0};
+    std::atomic<bool> lifted_{false};
+    bool imu_pose_ready_ = false;
+    int64_t imu_pose_started_us_ = 0;
+    float resting_accel_x_ = 0;
+    float resting_accel_y_ = 0;
+    float resting_accel_z_ = 0;
+    int64_t tilt_started_us_ = 0;
+    int64_t stable_started_us_ = 0;
+    int64_t last_tap_us_ = 0;
+    std::atomic<uint8_t> tap_feedback_variant_{2};
+    uint8_t expressive_feedback_mode_ = 0;
     int64_t button_press_start_time_ = 0;  // 按键按下时间戳
     esp_timer_handle_t long_press_timer_ = nullptr;  // 长按检测定时器
     bool nvs_reset_emotion_shown_ = false;  // 是否已显示 nvs_reset 表情
@@ -130,8 +149,8 @@ private:
         esp_lcd_panel_disp_on_off(panel, true);  // 打开显示
 
         // 使用 EmoteDisplay 播放 AAF 动画
-        display_ = new emote::EmoteDisplay(panel, panel_io, DISPLAY_WIDTH, DISPLAY_HEIGHT);
-        ESP_LOGI(TAG, "Using EmoteDisplay for AAF animations");
+        display_ = new emote::EmoteDisplay(panel, panel_io, DISPLAY_WIDTH, DISPLAY_HEIGHT, true);
+        ESP_LOGI(TAG, "Using EmoteDisplay with parametric eyes");
     }
 
     void InitializeCamera() {
@@ -188,6 +207,8 @@ private:
     }
 
     void SetAngle(float a1, float a2, float a3, float a4, float a5, int t) {
+        manual_control_generation_ = manual_control_generation_ + 1;
+        last_interaction_us_ = esp_timer_get_time();
         control_mode = 1;
         angle1 = a1;
         angle2 = a2;
@@ -196,6 +217,271 @@ private:
         angle5 = a5;
         if (t > 0) {
             vTaskDelay(pdMS_TO_TICKS(t));
+        }
+    }
+
+    bool CanRunIdleMotion(bool owns_angle_control = false) const {
+        return Application::GetInstance().GetDeviceState() == kDeviceStateIdle &&
+               calibrate_mode == 0 && Action_ID == 0 &&
+               vx >= -15 && vx <= 15 && vyaw >= -15 && vyaw <= 15 &&
+               !lifted_.load() && wake_feedback_until_us_.load() <= esp_timer_get_time() &&
+               tap_feedback_until_us_.load() <= esp_timer_get_time() &&
+               !ble_remote_is_running() && (control_mode == 0 || owns_angle_control);
+    }
+
+    void UpdateImuInteractions() {
+        if (!imu_is_initialized() || !isIMUInit || calibrate_mode != 0) return;
+
+        const int64_t now = esp_timer_get_time();
+        const float magnitude = sqrtf(accel_x * accel_x + accel_y * accel_y + accel_z * accel_z);
+
+        if (Action_ID != 0 || vx < -15 || vx > 15 || vyaw < -15 || vyaw > 15 ||
+            ble_remote_is_running()) {
+            tilt_started_us_ = 0;
+            stable_started_us_ = 0;
+            if (!imu_pose_ready_) imu_pose_started_us_ = 0;
+            return;
+        }
+
+        if (!imu_pose_ready_) {
+            if (imu_pose_started_us_ == 0) {
+                imu_pose_started_us_ = now;
+                resting_accel_x_ = accel_x;
+                resting_accel_y_ = accel_y;
+                resting_accel_z_ = accel_z;
+            } else {
+                resting_accel_x_ = resting_accel_x_ * 0.9f + accel_x * 0.1f;
+                resting_accel_y_ = resting_accel_y_ * 0.9f + accel_y * 0.1f;
+                resting_accel_z_ = resting_accel_z_ * 0.9f + accel_z * 0.1f;
+                if (now - imu_pose_started_us_ > 2000000) imu_pose_ready_ = true;
+            }
+            return;
+        }
+
+        const float resting_magnitude = sqrtf(resting_accel_x_ * resting_accel_x_ +
+                                               resting_accel_y_ * resting_accel_y_ +
+                                               resting_accel_z_ * resting_accel_z_);
+        const float pose_cosine = magnitude > 0.1f && resting_magnitude > 0.1f
+            ? (accel_x * resting_accel_x_ + accel_y * resting_accel_y_ +
+               accel_z * resting_accel_z_) / (magnitude * resting_magnitude)
+            : 1.0f;
+        const bool tilted = pose_cosine < 0.8192f;
+
+        if (tilted) {
+            stable_started_us_ = 0;
+            if (tilt_started_us_ == 0) tilt_started_us_ = now;
+            if (now - tilt_started_us_ > 350000) lifted_ = true;
+        } else {
+            tilt_started_us_ = 0;
+            if (lifted_) {
+                if (stable_started_us_ == 0) stable_started_us_ = now;
+                if (now - stable_started_us_ > 800000) {
+                    lifted_ = false;
+                    last_interaction_us_ = now;
+                }
+            }
+        }
+
+        if (!lifted_ && Application::GetInstance().GetDeviceState() == kDeviceStateIdle &&
+            pose_cosine > 0.9063f &&
+            fabsf(magnitude - resting_magnitude) > 2.5f && now - last_tap_us_ > 100000) {
+            last_tap_us_ = now;
+            tap_feedback_variant_ = (tap_feedback_variant_.load() + 1) % 3;
+            tap_feedback_until_us_ = now + 1200000;
+            last_interaction_us_ = now;
+        }
+    }
+
+    void SetIdlePose(float a1, float a2, float a3, float a4, float a5) {
+        control_mode = 1;
+        angle1 = a1;
+        angle2 = a2;
+        angle3 = a3;
+        angle4 = a4;
+        angle5 = a5;
+    }
+
+    bool WaitIdleMotion(int duration_ms, uint32_t generation) const {
+        for (int elapsed = 0; elapsed < duration_ms; elapsed += 50) {
+            if (manual_control_generation_ != generation || !CanRunIdleMotion(true)) {
+                return false;
+            }
+            vTaskDelay(pdMS_TO_TICKS(50));
+        }
+        return true;
+    }
+
+    void FinishIdleMotion(uint32_t generation) {
+        display_->ClearGaze();
+        if (manual_control_generation_ == generation && Action_ID == 0 && !ble_remote_is_running()) {
+            control_mode = 0;
+        }
+        if (Application::GetInstance().GetDeviceState() == kDeviceStateIdle &&
+            Action_ID == 0 && !ble_remote_is_running()) {
+            display_->SetEmotion("neutral");
+        }
+    }
+
+    void RunIdleMotion(uint32_t generation) {
+        const int64_t idle_us = esp_timer_get_time() - last_interaction_us_.load();
+        const bool drowsy = idle_us > 300000000;
+        const uint32_t motion = esp_random() % 20;
+        const float direction = (esp_random() & 1) ? 1.0f : -1.0f;
+
+        if (motion < 9) {
+            display_->SetEmotion("neutral");
+            display_->SetGaze(direction * 15, 0);
+            if (!WaitIdleMotion(300, generation)) {
+                FinishIdleMotion(generation);
+                return;
+            }
+            SetIdlePose(40, 40, 40, 40, direction * 15);
+            if (!WaitIdleMotion(1300, generation)) {
+                FinishIdleMotion(generation);
+                return;
+            }
+            display_->SetGaze(0, 0);
+            if (!WaitIdleMotion(250, generation)) {
+                FinishIdleMotion(generation);
+                return;
+            }
+            SetIdlePose(40, 40, 40, 40, 0);
+            WaitIdleMotion(600, generation);
+        } else if (motion < 13) {
+            display_->SetEmotion("listen");
+            display_->SetGaze(direction * 12, -3);
+            if (!WaitIdleMotion(300, generation)) {
+                FinishIdleMotion(generation);
+                return;
+            }
+            SetIdlePose(47, 47, 43, 43, direction * 8);
+            if (!WaitIdleMotion(1300, generation)) {
+                FinishIdleMotion(generation);
+                return;
+            }
+            SetIdlePose(40, 40, 40, 40, 0);
+            WaitIdleMotion(700, generation);
+        } else if (motion < 16) {
+            display_->SetEmotion("neutral");
+            display_->SetGaze(direction * 12, 2);
+            SetIdlePose(direction < 0 ? 33 : 47, direction < 0 ? 47 : 33,
+                        direction < 0 ? 33 : 47, direction < 0 ? 47 : 33, 0);
+            if (!WaitIdleMotion(1100, generation)) {
+                FinishIdleMotion(generation);
+                return;
+            }
+            SetIdlePose(40, 40, 40, 40, 0);
+            WaitIdleMotion(700, generation);
+        } else if (motion < (drowsy ? 19 : 18)) {
+            display_->SetEmotion("sleepy");
+            display_->SetGaze(0, 3);
+            SetIdlePose(48, 48, 48, 48, 0);
+            if (!WaitIdleMotion(1800, generation)) {
+                FinishIdleMotion(generation);
+                return;
+            }
+            display_->SetEmotion("surprised");
+            if (!WaitIdleMotion(450, generation)) {
+                FinishIdleMotion(generation);
+                return;
+            }
+            SetIdlePose(40, 40, 40, 40, 0);
+            WaitIdleMotion(600, generation);
+        } else {
+            display_->SetEmotion("relaxed");
+            display_->ClearGaze();
+            control_mode = 0;
+            Action_ID = Stretch_ID;
+            for (int elapsed = 0; elapsed < 8000 && Action_ID != 0; elapsed += 100) {
+                if (manual_control_generation_ != generation ||
+                    Application::GetInstance().GetDeviceState() != kDeviceStateIdle ||
+                    ble_remote_is_running()) {
+                    return;
+                }
+                vTaskDelay(pdMS_TO_TICKS(100));
+            }
+            if (Application::GetInstance().GetDeviceState() == kDeviceStateIdle && Action_ID == 0) {
+                display_->SetEmotion("neutral");
+            }
+            return;
+        }
+
+        FinishIdleMotion(generation);
+    }
+
+    void UpdateExpressiveFeedback() {
+        const int64_t now = esp_timer_get_time();
+        const DeviceState state = Application::GetInstance().GetDeviceState();
+        uint8_t mode = 0;
+        if (lifted_) {
+            mode = 1;
+        } else if (state == kDeviceStateListening) {
+            mode = 6;
+        } else if (state == kDeviceStateSpeaking) {
+            mode = 7;
+        } else if (wake_feedback_until_us_.load() > now) {
+            mode = 2;
+        } else if (tap_feedback_until_us_.load() > now) {
+            const uint8_t variant = tap_feedback_variant_.load();
+            mode = variant == 0 ? 3 : variant == 1 ? 4 : 8;
+        } else if (state == kDeviceStateConnecting) {
+            mode = 5;
+        }
+
+        if (mode != expressive_feedback_mode_) {
+            expressive_feedback_mode_ = mode;
+            display_->ClearGaze();
+            if (mode == 1) display_->SetEmotion("shocked");
+            else if (mode == 2) display_->SetEmotion("surprised");
+            else if (mode == 3) display_->SetEmotion("surprised");
+            else if (mode == 6) display_->SetEmotion("listen");
+            else if (mode == 4 || mode == 7) display_->SetEmotion("happy");
+            else if (mode == 8) display_->SetEmotion("loving");
+            else if (mode == 5) display_->SetEmotion("thinking");
+            else if (Application::GetInstance().GetDeviceState() == kDeviceStateIdle) {
+                display_->SetEmotion("neutral");
+                control_mode = 0;
+            }
+        }
+
+        if (mode == 1) {
+            display_->SetGaze(0, 5);
+            SetIdlePose(72, 72, 72, 72, 0);
+        } else if (mode == 2) {
+            const int64_t remaining = wake_feedback_until_us_.load() - now;
+            if (remaining > 1300000) {
+                display_->SetGaze(0, 5);
+                SetIdlePose(54, 54, 54, 54, 0);
+            } else if (remaining > 500000) {
+                display_->SetGaze(0, -7);
+                SetIdlePose(28, 28, 28, 28, 0);
+            } else {
+                display_->SetGaze(0, -3);
+                SetIdlePose(38, 38, 38, 38, 0);
+            }
+        } else if (mode == 3) {
+            display_->SetGaze(0, -5);
+            SetIdlePose(34, 34, 46, 46, 0);
+        } else if (mode == 4) {
+            display_->SetGaze(sinf(now / 120000.0f) * 8.0f, -2);
+            SetIdlePose(35, 45, 35, 45, 0);
+        } else if (mode == 8) {
+            display_->SetGaze(7, -2);
+            SetIdlePose(45, 35, 43, 37, 10);
+        } else if (mode == 5) {
+            const float scan = sinf(now / 420000.0f);
+            display_->SetGaze(scan * 14.0f, -6);
+            SetIdlePose(37, 43, 37, 43, scan * 12.0f);
+        } else if (mode == 6) {
+            const float focus = sinf(now / 360000.0f);
+            display_->SetGaze(focus * 5.0f, -5);
+            SetIdlePose(32 + focus * 2, 32 - focus * 2, 48 + focus * 2, 48 - focus * 2,
+                        focus * 5);
+        } else if (mode == 7) {
+            const float speech = sinf(now / 150000.0f);
+            display_->SetGaze(0, speech * 5.0f);
+            SetIdlePose(38 + speech * 7, 38 + speech * 7, 38 + speech * 7,
+                        38 + speech * 7, sinf(now / 360000.0f) * 6);
         }
     }
 
@@ -300,6 +586,8 @@ private:
     }
 
     void SetDogSpeed(int dog_vx, int dog_vyaw, int time) {
+        manual_control_generation_ = manual_control_generation_ + 1;
+        last_interaction_us_ = esp_timer_get_time();
         ESP_LOGI(TAG, "SetDogSpeed: vx=%d, vyaw=%d, time=%d", dog_vx, dog_vyaw, time);
         control_mode = 0;
         motor_speed = 0;
@@ -704,10 +992,33 @@ public:
             while (true) {
                 xgo_rx();
                 imu_read_once();
+                static_cast<PuppyBoard*>(arg)->UpdateImuInteractions();
                 vTaskDelay(pdMS_TO_TICKS(XGO_RX_TASK_INTERVAL_MS));
             }
             vTaskDelete(NULL);
         }, "xgo_rx_task", 4096, this, 5, &xgo_rx_task_handle_, 1);
+
+        xTaskCreatePinnedToCore([](void* arg) {
+            auto* board = static_cast<PuppyBoard*>(arg);
+            int64_t next_motion_us = esp_timer_get_time() + 8000000;
+            while (true) {
+                const int64_t now = esp_timer_get_time();
+                board->UpdateExpressiveFeedback();
+                if (board->CanRunIdleMotion() && now >= next_motion_us) {
+                    const uint32_t generation = board->manual_control_generation_;
+                    board->RunIdleMotion(generation);
+                    const int64_t idle_us = now - board->last_interaction_us_.load();
+                    const int64_t base_us = idle_us < 60000000 ? 5000000 :
+                                            idle_us > 300000000 ? 15000000 : 8000000;
+                    const uint32_t spread_us = idle_us < 60000000 ? 7000001 :
+                                               idle_us > 300000000 ? 15000001 : 12000001;
+                    next_motion_us = esp_timer_get_time() + base_us + esp_random() % spread_us;
+                } else if (!board->CanRunIdleMotion()) {
+                    next_motion_us = now + 8000000;
+                }
+                vTaskDelay(pdMS_TO_TICKS(200));
+            }
+        }, "idle_motion", 3072, this, 3, &idle_motion_task_handle_, 1);
         ESP_LOGI(TAG, "XGO control tasks created");
     }
 
@@ -769,6 +1080,20 @@ public:
         display_->SetEmotion("launch");
         Application::GetInstance().PlaySound(Lang::Sounds::OGG_WOOF());
         ESP_LOGI(TAG, "Boot animation: stretch + silly + woof");
+    }
+
+    void OnWakeWordDetected() override {
+        const int64_t now = esp_timer_get_time();
+        last_interaction_us_ = now;
+        wake_feedback_until_us_ = now + 1800000;
+    }
+
+    void OnDeviceStateChanged(DeviceState old_state, DeviceState new_state) override {
+        if (new_state == kDeviceStateConnecting || new_state == kDeviceStateListening ||
+            new_state == kDeviceStateSpeaking ||
+            (new_state == kDeviceStateIdle && old_state != kDeviceStateUnknown)) {
+            last_interaction_us_ = esp_timer_get_time();
+        }
     }
 
     virtual void OnInitializationComplete() override {

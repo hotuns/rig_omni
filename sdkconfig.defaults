@@ -82,3 +82,4 @@ CONFIG_LV_BUILD_DEMOS=n
 
 # Do not send wake word audio data to server
 CONFIG_SEND_WAKE_WORD_DATA=n
+CONFIG_CUSTOM_WAKE_WORD_THRESHOLD=12

@@ -13,6 +13,7 @@
 #include "backlight.h"
 #include "camera.h"
 #include "assets.h"
+#include "device_state.h"
 
 class Display;
 class AudioService;
@@ -87,6 +88,8 @@ public:
     virtual std::string GetDeviceStatusJson() = 0;
     virtual void OnStartup() {}  // 启动时调用（assets加载后），板级可重写执行开机动画
     virtual void OnInitializationComplete() {}  // 初始化完成时调用，板级可重写
+    virtual void OnWakeWordDetected() {}
+    virtual void OnDeviceStateChanged(DeviceState old_state, DeviceState new_state) {}
     virtual void OnWifiConfigStart() {}  // WiFi配网开始时调用，板级可重写
     virtual void OnWifiConfigEnd() {}  // WiFi配网结束时调用，板级可重写
     virtual void CheckCalibration(Display* display, AudioService& audio) {}  // 检查标定状态，板级可重写

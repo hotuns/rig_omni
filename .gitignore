@@ -1,5 +1,6 @@
 # ===== 构建产物 =====
 build/
+build.*/
 bin/
 dist/
 releases/
@@ -40,7 +41,8 @@ Thumbs.db
 __pycache__/
 
 # ===== 已迁移至 tools/ 的开发脚本 =====
-scripts/
+scripts/*
+!scripts/configure-puppy-control.sh
 
 # ===== help 文档 =====
 help/
