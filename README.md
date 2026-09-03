@@ -203,6 +203,34 @@ main/boards/<board>/emoji/
 
 ## 🛠️ Development
 
+### Custom Control Server
+
+Puppy can connect to the independent control server while retaining the vendor voice and MCP cloud services.
+
+Install Docker and Docker Compose on the server, then run:
+
+```bash
+git clone --branch codex/custom-control-platform https://github.com/hotuns/rig_omni.git
+cd rig_omni
+cp .env.docker.example .env
+docker compose -f docker-compose.hub.yml up -d
+```
+
+Docker pulls `hedongshu/rig-control:latest`, which supports AMD64 and ARM64. Open `http://localhost:8000` locally or `http://SERVER_PUBLIC_IP:8000` remotely. For public access, open TCP port 8000 and set `RIG_PUBLIC_URL` in `.env` to the public origin.
+
+In the Devices page, add the Puppy's Wi-Fi MAC address as its device ID and save the generated device token. Connect the Puppy to a computer with ESP-IDF v5.5.2+, then run:
+
+```bash
+source ~/esp/esp-idf/export.sh
+
+scripts/configure-puppy-control.sh \
+  --url ws://SERVER_PUBLIC_IP:8000/ws/device \
+  --token YOUR_DEVICE_TOKEN \
+  --port /dev/cu.usbmodem1101
+```
+
+Use `wss://YOUR_DOMAIN/ws/device` when the server is behind HTTPS. Linux serial ports are typically `/dev/ttyUSB0` or `/dev/ttyACM0`. The script builds with an isolated temporary configuration and does not overwrite the repository's existing `sdkconfig`.
+
 ### Adding a New Board
 
 ```bash
