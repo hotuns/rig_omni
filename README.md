@@ -8,6 +8,66 @@ ESP32-S3 · Voice AI · EAF Animation · MCP Remote Control · Multi-Bot Archite
 
 ---
 
+## Added In This Branch: Puppy Remote Control Platform
+
+> This section documents features added by the `codex/custom-control-platform` branch on top of the official RIG-Omni project. Content after “Official Project Documentation” is retained from the upstream project.
+
+Puppy can connect to an independent control server while retaining the vendor voice and MCP cloud services. This branch adds device management, web control, workflows, offline reminders, remote speech, a new expression system, and interactive robot behaviors.
+
+### 1. Deploy With Docker Compose
+
+Install Docker and Docker Compose on the server, then run:
+
+```bash
+git clone --branch codex/custom-control-platform https://github.com/hotuns/rig_omni.git
+cd rig_omni
+cp .env.docker.example .env
+docker compose -f docker-compose.hub.yml up -d
+```
+
+Docker pulls `hedongshu/rig-control:latest`, which supports AMD64 and ARM64. The control console data is stored in a Docker volume. To update the service or view logs:
+
+```bash
+docker compose -f docker-compose.hub.yml pull
+docker compose -f docker-compose.hub.yml up -d
+docker compose -f docker-compose.hub.yml logs -f
+```
+
+### 2. Determine The Remote Address
+
+- Local: `http://localhost:8000`
+- LAN: `http://SERVER_LAN_IP:8000`
+- Internet: `http://SERVER_PUBLIC_IP:8000`
+
+For public access, open TCP port 8000 and set `RIG_PUBLIC_URL` in `.env` to the public origin. When using a domain with an HTTPS reverse proxy, set it to `https://YOUR_DOMAIN`; the Puppy WebSocket address becomes `wss://YOUR_DOMAIN/ws/device`.
+
+### 3. Add The Puppy
+
+1. Open the Devices page in the control console.
+2. Add the Puppy's Wi-Fi MAC address as its device ID.
+3. Save the generated device token. Do not publish it or commit it to Git.
+
+### 4. Configure And Flash The Firmware
+
+Connect the Puppy to a computer with ESP-IDF v5.5.2+, then run:
+
+```bash
+source ~/esp/esp-idf/export.sh
+
+scripts/configure-puppy-control.sh \
+  --url ws://SERVER_PUBLIC_IP:8000/ws/device \
+  --token YOUR_DEVICE_TOKEN \
+  --port /dev/cu.usbmodem1101
+```
+
+Linux serial ports are typically `/dev/ttyUSB0` or `/dev/ttyACM0`. Use `wss://YOUR_DOMAIN/ws/device` when the server is behind HTTPS. The script builds with an isolated temporary configuration and does not overwrite the repository's existing `sdkconfig`.
+
+The first installation requires a complete flash with the updated partition table. Workflows, reminders, and media can then be synchronized remotely. See [`server/README.md`](server/README.md) for server details.
+
+---
+
+## Official Project Documentation
+
 ## Table of Contents
 
 - [Overview](#-overview)
@@ -202,34 +262,6 @@ main/boards/<board>/emoji/
 ---
 
 ## 🛠️ Development
-
-### Custom Control Server
-
-Puppy can connect to the independent control server while retaining the vendor voice and MCP cloud services.
-
-Install Docker and Docker Compose on the server, then run:
-
-```bash
-git clone --branch codex/custom-control-platform https://github.com/hotuns/rig_omni.git
-cd rig_omni
-cp .env.docker.example .env
-docker compose -f docker-compose.hub.yml up -d
-```
-
-Docker pulls `hedongshu/rig-control:latest`, which supports AMD64 and ARM64. Open `http://localhost:8000` locally or `http://SERVER_PUBLIC_IP:8000` remotely. For public access, open TCP port 8000 and set `RIG_PUBLIC_URL` in `.env` to the public origin.
-
-In the Devices page, add the Puppy's Wi-Fi MAC address as its device ID and save the generated device token. Connect the Puppy to a computer with ESP-IDF v5.5.2+, then run:
-
-```bash
-source ~/esp/esp-idf/export.sh
-
-scripts/configure-puppy-control.sh \
-  --url ws://SERVER_PUBLIC_IP:8000/ws/device \
-  --token YOUR_DEVICE_TOKEN \
-  --port /dev/cu.usbmodem1101
-```
-
-Use `wss://YOUR_DOMAIN/ws/device` when the server is behind HTTPS. Linux serial ports are typically `/dev/ttyUSB0` or `/dev/ttyACM0`. The script builds with an isolated temporary configuration and does not overwrite the repository's existing `sdkconfig`.
 
 ### Adding a New Board
 

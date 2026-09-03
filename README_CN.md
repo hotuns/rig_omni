@@ -8,6 +8,66 @@ ESP32-S3 · 语音 AI · EAF 动画 · MCP 远程控制 · 多机器人架构
 
 ---
 
+## 本分支新增：Puppy 远程控制平台
+
+> 本节是 `codex/custom-control-platform` 分支在官方 RIG-Omni 项目基础上增加的功能。下方“原项目说明”之后的内容保留自官方项目。
+
+Puppy 固件可在保留原厂语音和 MCP 云服务的同时连接独立控制服务器。新增功能包括设备管理、网页控制、工作流、离线提醒、远程语音、表情系统和机器狗互动行为。
+
+### 1. 使用 Docker Compose 部署
+
+服务器需要安装 Docker 和 Docker Compose。镜像同时支持 AMD64 和 ARM64：
+
+```bash
+git clone --branch codex/custom-control-platform https://github.com/hotuns/rig_omni.git
+cd rig_omni
+cp .env.docker.example .env
+docker compose -f docker-compose.hub.yml up -d
+```
+
+Docker 会拉取 `hedongshu/rig-control:latest`，控制台数据保存在 Docker volume 中。更新和查看日志：
+
+```bash
+docker compose -f docker-compose.hub.yml pull
+docker compose -f docker-compose.hub.yml up -d
+docker compose -f docker-compose.hub.yml logs -f
+```
+
+### 2. 确定远程地址
+
+- 本机访问：`http://localhost:8000`
+- 局域网访问：`http://服务器局域网IP:8000`
+- 公网访问：`http://服务器公网IP:8000`
+
+公网服务器需要在防火墙或安全组中开放 TCP 8000 端口，并把 `.env` 中的 `RIG_PUBLIC_URL` 改为实际公网地址。使用域名和 HTTPS 反向代理时，将其设为 `https://你的域名`；机器狗连接地址对应为 `wss://你的域名/ws/device`。
+
+### 3. 在控制台添加机器狗
+
+1. 打开控制台的“设备”页面。
+2. 使用机器狗的 Wi-Fi MAC 地址作为设备 ID 创建设备。
+3. 保存控制台生成的设备令牌。令牌只用于这一台机器狗，不要公开或提交到 Git。
+
+### 4. 写入连接配置并刷机
+
+在安装了 ESP-IDF v5.5.2+ 的电脑上连接机器狗，然后执行：
+
+```bash
+source ~/esp/esp-idf/export.sh
+
+scripts/configure-puppy-control.sh \
+  --url ws://服务器公网IP:8000/ws/device \
+  --token 控制台生成的设备令牌 \
+  --port /dev/cu.usbmodem1101
+```
+
+Linux 串口通常为 `/dev/ttyUSB0` 或 `/dev/ttyACM0`。使用 HTTPS 域名时，`--url` 应填写 `wss://你的域名/ws/device`。脚本使用独立临时配置构建，不会覆盖仓库现有的 `sdkconfig`，刷机完成后机器狗会自动连接控制台。
+
+首次安装自定义固件需要完整烧录更新后的分区表；后续工作流、提醒和媒体内容可从控制台远程同步。服务端详细说明见 [`server/README.md`](server/README.md)。
+
+---
+
+## 原项目说明
+
 ## 目录
 
 - [概述](#-概述)
@@ -202,60 +262,6 @@ main/boards/<board>/emoji/
 ---
 
 ## 🛠️ 开发指南
-
-### 自定义控制服务器
-
-Puppy 固件可在保留原厂语音和 MCP 云服务的同时连接独立控制服务器。配套的 FastAPI 服务、设备管理控制台、工作流、离线提醒和远程语音功能位于 [`server/`](server/README.md)。
-
-#### 1. 使用 Docker Compose 部署
-
-服务器需要安装 Docker 和 Docker Compose。镜像同时支持 AMD64 和 ARM64：
-
-```bash
-git clone --branch codex/custom-control-platform https://github.com/hotuns/rig_omni.git
-cd rig_omni
-cp .env.docker.example .env
-docker compose -f docker-compose.hub.yml up -d
-```
-
-Docker 会拉取 `hedongshu/rig-control:latest`，控制台数据保存在 Docker volume 中。更新和查看日志：
-
-```bash
-docker compose -f docker-compose.hub.yml pull
-docker compose -f docker-compose.hub.yml up -d
-docker compose -f docker-compose.hub.yml logs -f
-```
-
-#### 2. 确定远程地址
-
-- 本机访问：`http://localhost:8000`
-- 局域网访问：`http://服务器局域网IP:8000`
-- 公网访问：`http://服务器公网IP:8000`
-
-公网服务器需要在防火墙或安全组中开放 TCP 8000 端口，并把 `.env` 中的 `RIG_PUBLIC_URL` 改为实际公网地址。使用域名和 HTTPS 反向代理时，将其设为 `https://你的域名`；机器狗连接地址对应为 `wss://你的域名/ws/device`。
-
-#### 3. 在控制台添加机器狗
-
-1. 打开控制台的“设备”页面。
-2. 使用机器狗的 Wi-Fi MAC 地址作为设备 ID 创建设备。
-3. 保存控制台生成的设备令牌。令牌只用于这一台机器狗，不要公开或提交到 Git。
-
-#### 4. 写入连接配置并刷机
-
-在安装了 ESP-IDF v5.5.2+ 的电脑上连接机器狗，然后执行：
-
-```bash
-source ~/esp/esp-idf/export.sh
-
-scripts/configure-puppy-control.sh \
-  --url ws://服务器公网IP:8000/ws/device \
-  --token 控制台生成的设备令牌 \
-  --port /dev/cu.usbmodem1101
-```
-
-Linux 串口通常为 `/dev/ttyUSB0` 或 `/dev/ttyACM0`。使用 HTTPS 域名时，`--url` 应填写 `wss://你的域名/ws/device`。脚本使用独立临时配置构建，不会覆盖仓库现有的 `sdkconfig`，刷机完成后机器狗会自动连接控制台。
-
-首次安装自定义固件需要完整烧录更新后的分区表；后续工作流、提醒和媒体内容可从控制台远程同步。
 
 ### 新增板型
 
