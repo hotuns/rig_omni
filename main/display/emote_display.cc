@@ -142,6 +142,25 @@ static void DrawArc(uint16_t* buffer, int width, int height, float cx, float cy,
     }
 }
 
+static void DrawQuestionMark(uint16_t* buffer, int width, int height, float x, float y,
+                             float scale, uint16_t color)
+{
+    DrawArc(buffer, width, height, x, y + 8 * scale, 9 * scale,
+            static_cast<float>(M_PI) + 0.32f, static_cast<float>(M_PI * 2) - 0.1f,
+            3 * scale, color);
+    DrawLine(buffer, width, height, x + 8.5f * scale, y + 9 * scale,
+             x + 2 * scale, y + 19 * scale, 3 * scale, color);
+    FillCircle(buffer, width, height, x + 2 * scale, y + 27 * scale, 2.2f * scale, color);
+}
+
+static void DrawZ(uint16_t* buffer, int width, int height, float x, float y,
+                  float size, float thickness, uint16_t color)
+{
+    DrawLine(buffer, width, height, x, y, x + size, y, thickness, color);
+    DrawLine(buffer, width, height, x + size, y, x, y + size, thickness, color);
+    DrawLine(buffer, width, height, x, y + size, x + size, y + size, thickness, color);
+}
+
 static uint16_t ScaleColor(uint16_t color, float factor)
 {
     const uint16_t red = static_cast<uint16_t>(((color >> 11) & 0x1F) * factor);
@@ -570,6 +589,17 @@ void EmoteDisplay::RenderParametricEyes(int64_t now_us)
                     static_cast<float>(M_PI) - 0.5f, static_cast<float>(M_PI) + 0.5f,
                     thickness, color);
         }
+    }
+
+    if (confused) {
+        const float wobble = sinf(t * 2.2f) * 2.0f;
+        DrawQuestionMark(parametric_buffer_, width_, height_, 176 + wobble, 45, 1.15f, kEyeColor);
+    }
+    if (sleepy) {
+        const float rise = fmodf(t * 7.0f, 7.0f);
+        DrawZ(parametric_buffer_, width_, height_, 154, 72 - rise * 0.35f, 10, 2.4f, kEyeColor);
+        DrawZ(parametric_buffer_, width_, height_, 169, 57 - rise * 0.5f, 13, 2.7f, kEyeColor);
+        DrawZ(parametric_buffer_, width_, height_, 187, 40 - rise * 0.65f, 16, 3.0f, kEyeColor);
     }
 
     const float mouth_y = 171;
